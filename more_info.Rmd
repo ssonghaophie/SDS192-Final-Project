@@ -1,0 +1,136 @@
+---
+title: "Analyzing the Trend of Real Estate Values in USA"
+author: "Sophie Song, Jacqueline Chen"
+date: "Last updated on `r Sys.Date()`"
+output:
+  html_document:
+    toc: true
+    toc_depth: 2
+    toc_float: true
+    df_print: kable
+---
+
+<!--
+Comments in HTML are like this! 
+-->
+
+# Influence of General Trend on U.S. States
+
+The graph in the front page shows the distribution of S&P CoreLogic Case-Shiller Home Price Indices, one of the leading measures of U.S. residential real estate prices.^[S&P Dow Jones Indices LLC, S&P/Case-Shiller U.S. National Home Price Index [CSUSHPISA], retrieved from FRED, Federal Reserve Bank of St. Louis; https://fred.stlouisfed.org/series/CSUSHPISA, December 13, 2021.] It keeps track of the changes in the value of residential real estate from 2011 to 2021 in 10 metropolitan areas of the U.S, 20 major metropolitan areas, and nine U.S. Census divisions nationally. According to the line, there is a general trend of increasing house prices, although the rate of increase got extremely faster in recent years, starting at about March of 2020. There was a 19.52% increase in the national house price this year compared to last year, which is more than two times higher than 7.1% increase from 2019 to 2020. This is clearly abnormal from the linear trend that persisted for first 8 years. So is it true that we are at the beginning of another house bubble? Let's investigate more.
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r include=FALSE}
+library(tidyverse)
+library(sf)
+library(leaflet)
+library(plyr)
+library(leaflet.extras2)
+library(geojsonsf)
+
+cities <- read.csv("us_cities.csv")
+real_estate <- read.csv("real_estate_us.csv")
+world_cities <- read.csv("worldcities.csv")
+mca_index <- read.csv("MCAIndex.csv")
+```
+
+```{r include=FALSE}
+s <- sapply(strsplit(real_estate$RegionName, split=',', fixed=TRUE), function(x) (x[1]))  #split RegionName into City and State
+
+real_estate <- real_estate %>% 
+  mutate( city = s ) %>% 
+  select(city, StateName, SizeRank, X2000.09.30, X2001.09.30, X2002.09.30, X2003.09.30, X2004.09.30, X2005.09.30, X2006.09.30, X2007.09.30, X2008.09.30, X2009.09.30, X2010.09.30, X2011.09.30, X2012.09.30, X2013.09.30, X2014.09.30, X2015.09.30, X2016.09.30, X2017.09.30, X2018.09.30, X2019.09.30, X2020.09.30, X2021.09.30)
+cities <- cities %>% 
+  mutate( StateName = state_id)
+
+real_estate <- real_estate %>%  #join cities to real_estate by city variable
+  left_join(cities, by = c("city", "StateName"))
+
+real_estate_sf <- real_estate %>% #turn real_estate into a sf object 
+  filter(!is.na(lng) & !is.na(lat)) %>%
+  mutate( lng = as.numeric(lng), lat = as.numeric(lat)) %>%
+  st_as_sf(coords = c("lng", "lat"), crs = 4326)
+
+USA_map <-  maps::map("state", plot = FALSE, fill = TRUE)
+USA_map_sf <- USA_map %>% 
+  st_as_sf()
+
+real_estate_tidy <- real_estate %>%
+  pivot_longer( names_to = "time", values_to = "price", cols = X2000.09.30:X2021.09.30) %>%
+    mutate(SizeRank = cut_number(SizeRank, 3)) %>%
+    mutate(population = cut_number(population, 4))
+
+real_estate_tidy_histogram <- real_estate_tidy %>% 
+  filter(time == "X2021.09.30" | time == "X2019.09.30" )
+
+
+real_estate_tidy_sf1 <- real_estate_tidy %>%
+  filter(!is.na(lng) & !is.na(lat) & !is.na(price) & StateName != "HI" & StateName != "AK") %>%
+  mutate( lng = as.numeric(lng), lat = as.numeric(lat)) %>%
+  st_as_sf(coords = c("lng", "lat"), crs = 4326) %>%
+  mutate(price = cut_number(price, 7)) 
+
+real_estate_tidy_sf2 <- real_estate_tidy_sf1 %>%
+  filter( time == "X2021.09.30" )
+
+real_estate_tidy_sf3 <- real_estate_tidy_sf1 %>%
+  filter( time == "X2006.09.30" )
+
+```
+
+How does the increasing house prices impact U.S. by states and geographical locations? To address this question, U.S. map with the distribution of house values by metropolitan areas are created and visualized.
+
+```{r echo=FALSE, warning=FALSE}
+# plot maps
+
+ggplot() + 
+  geom_sf( data = USA_map_sf) + 
+  geom_sf(data = real_estate_tidy_sf3, aes( size = price, color = price), alpha = 0.35) + 
+  scale_color_brewer(palette = "GnBu")+
+  labs( title = "US Cities' Housing Price Distribution in 2006")
+
+ggplot() + 
+  geom_sf(data = USA_map_sf) + 
+  geom_sf(data = real_estate_tidy_sf2, aes( size = price, color = price),  alpha = 0.35) +
+  scale_color_brewer(palette = "GnBu") +
+  labs( title = "US Cities' Housing Price Distribution in 2021")
+```
+
+
+There are striking differences between the map of 2006 and 2021. Not only did the points on the map representing the number of metropolitan areas increase, but also the house price values of all places increased heavily, indicated by the size and color of the points. This illustrates how the real estate values developed along with the advancing society and economy. 
+Another observation is that while the high price houses are concentrated relatively heavily on the east and west coast of the U.S. in 2006, that of 2021 reveals a more widespread pattern over the locations. Therefore, we can visualize that the price gap is reducing, although the price value is increasing. However, it is still true that states with core metropolitan areas such as Washington, California, New York, New Jersey, and Florida contain more expensive houses in general.
+
+
+
+
+```{r echo=FALSE, warning=FALSE}
+ggplot(real_estate_tidy, aes(x = SizeRank, y = price, color = population)) + 
+  geom_point(position = position_dodge(width = 0.75)) +
+  labs(title = "House Price by Size Rank of the Cities and Population Density", y = "House Price (U.S. dollars)", x= "Size Rank", col = "Population")
+```
+
+In the dot plot above, we compared the house price of different size and population of metropolitan cities. When the cities' ranks are in between 1-302, the cities with higher populations tend to have higher average housing prices. However, the correlation doesn't look that strong for the smaller cities ranking from 302-933 because the cities with lower populations tend to have higher average housing prices for those smaller cities. The average house price of larger cites with higher rank generally looks higher than smaller cities. Therefore, we can conclude that the house value is higher for the bigger cities with larger population than smaller metropolitan areas. It is also notable that if we focus on the population sizes, smaller cities with smaller population actually have higher average housing price.
+
+
+## House Bubbles?
+
+```{r echo=FALSE}
+
+mca_index <- mca_index %>% 
+  mutate(year = substr(Year,1,4)) 
+
+ggplot(data = mca_index, mapping = aes(x = year, y = MCAIndex)) + 
+  geom_col() + 
+  labs(title = "Mortgage Credit Availability Index 2004-2020", x = "Year", y = "Index")
+```
+
+Coming back to the question of whether or not we are experiencing another financial crisis following the house bubble, one crucial difference we found between 2006 and 2021 is that the mortgage credit availability is a lot lower now than before. Mortgage credit availability index graphed above shows that the index value is a lot smaller in 2020 (122.1) compared to that of 2006 (725.6). Since the index measures the availability of mortgage credit, lower index represents the tighter mortgage credit standards given to individuals. Therefore, this might serve as one reason why the recent sharp increase doesn't signal a start of house bubble, because people won't be able to purchase loans easily to buy houses.
+
+Stepping aside from housing bubble, one convincing cause that might have influenced the recent upsurge of the national house price of US is a recent COVID-19 global pandemic. Because the demand for houses increased drastically due to the impact of COVID-19 but supply couldn't meet up that demand, the price had to increase in a greater rate according to the law of supply and demand.  
+
+
+
+

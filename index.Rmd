@@ -1,0 +1,60 @@
+---
+title: "Analyzing the Trend of Real Estate Values in USA"
+author: "Sophie Song, Jacqueline Chen"
+date: "Last updated on `r Sys.Date()`"
+output:
+  pdf_document:
+    toc: yes
+    toc_depth: '2'
+  html_document:
+    toc: yes
+    toc_depth: 2
+    toc_float: yes
+    df_print: kable
+---
+
+<!--
+Comments in HTML are like this! 
+-->
+
+## Background and Overview
+
+Real Estate formally refers to a real property that is used for residential, commercial, or industrial purposes, such as houses, mansions, shopping malls, farms, lands, and buildings.^[https://www.bankrate.com/glossary/r/real-estate/] Although it represents variety of properties, the most accustomed and well-known usage of the word 'real estate' is to mean houses. Driven from the purposes ranging from residence to investment, households are inevitable to rent or buy houses at some point in their lives. Therefore, they are vulnerable to the changing price values of their current or prospect real estates. This website investigates the general trend of the house values in US, and analyzes how some economic factors are influencing the trend.  
+
+## General Trend 
+
+The recent upsurge of the national house price of US is evoking anxiety and concerns from US residents. Some opinions are drawing parallels from the current real estate market with 2006 housing bubble market, intimating fears about the past financial crisis^[https://www.bloomberg.com/businessweek].  
+
+```{r, include = FALSE}
+# import libraries
+
+library(maps)
+library(tidyverse)
+library(readr)
+library(USAboundaries)
+library(tmap)
+library(sf)
+
+```
+
+``` {r echo=FALSE, message=FALSE}
+
+# import data, rename variables
+zillow_zhvi <- read_csv("zillow_zhvi.csv") 
+uscities <- read_csv("uscities.csv")
+spindex <- read_csv("SPindex.csv") %>% 
+  dplyr::rename(`National` = CSUSHPISA, `10-City` = SPCS10RSA, `20-City` = SPCS20RSA)
+
+# tidy data
+spindex_tidy <- spindex %>% 
+  pivot_longer(names_to = "TYPE", 
+               values_to = "INDEX", 
+               cols = -DATE)
+
+# graph the line graph
+ggplot(spindex_tidy, aes(x = DATE, y = INDEX, col = TYPE)) +
+  geom_line() + 
+  labs(title="Distribution of House Price Index Values 2011-2021", subtitle = "S&P CoreLogic Case-Shiller Home Price Indices", x = "Year", y = "Index", col = "Type")
+```
+
+

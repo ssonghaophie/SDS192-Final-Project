@@ -1,0 +1,93 @@
+---
+title: "final project"
+author: "Jacqueline Chen"
+date: "2021/12/8"
+output: github_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(tidyverse)
+library(sf)
+library(leaflet)
+library(plyr)
+library(leaflet.extras2)
+library(geojsonsf)
+
+cities <- read.csv("us_cities.csv")
+real_estate <- read.csv("real_estate_us.csv")
+world_cities <- read.csv("worldcities.csv")
+
+```
+
+
+```{r}
+s <- sapply(strsplit(real_estate$RegionName, split=',', fixed=TRUE), function(x) (x[1]))  #split RegionName into City and State
+
+real_estate <- real_estate %>% 
+  mutate( city = s ) %>% 
+  select(city, StateName, SizeRank, X2000.01.31, X2001.01.31, X2002.01.31, X2003.01.31, X2004.01.31, X2005.01.31, X2006.01.31, X2007.01.31, X2008.01.31, X2009.01.31, X2010.01.31, X2011.01.31, X2012.01.31, X2013.01.31, X2014.01.31, X2015.01.31, X2016.01.31, X2017.01.31, X2018.01.31, X2019.01.31, X2020.01.31, X2021.01.31)
+
+cities <- cities %>% 
+  mutate( StateName = state_id)
+
+real_estate <- real_estate %>%  #join cities to real_estate by city variable
+  left_join(cities, by = c("city", "StateName"))
+
+real_estate_sf <- real_estate %>% #turn real_estate into a sf object 
+  filter(!is.na(lng) & !is.na(lat)) %>%
+  mutate( lng = as.numeric(lng), lat = as.numeric(lat)) %>%
+  st_as_sf(coords = c("lng", "lat"), crs = 4326)
+
+USA_map <-  maps::map("state", plot = FALSE, fill = TRUE)
+USA_map_sf <- USA_map %>% 
+  st_as_sf()
+
+real_estate_tidy <- real_estate %>%
+  pivot_longer( names_to = "time", values_to = "price", cols = X2000.01.31:X2021.01.31) %>%
+    mutate(SizeRank = cut_number(SizeRank, 3)) %>%
+    mutate(population = cut_number(population, 4))
+
+real_estate_tidy_sf1 <- real_estate_tidy %>%
+  filter(!is.na(lng) & !is.na(lat) & !is.na(price) & StateName != "HI" & StateName != "AK") %>%
+  mutate( lng = as.numeric(lng), lat = as.numeric(lat)) %>%
+  st_as_sf(coords = c("lng", "lat"), crs = 4326) %>%
+  mutate(price = cut_number(price, 3)) 
+
+real_estate_tidy_sf2 <- real_estate_tidy_sf1 %>%
+  filter( time == "X2000.01.31" )
+
+
+
+
+```
+
+#get reid of Hawaii and Alaska 
+```{r}
+ggplot() + 
+  geom_sf( data = USA_map_sf) + 
+  geom_sf(data = real_estate_tidy_sf2, aes( size = price), color = "navyblue") + 
+  labs( title = "US Cities' Housing Price Distribution in 2021")
+
+
+leaflet() %>% 
+  addTiles() %>%  
+  addTimeslider(data = real_estate_tidy_sf2,
+             options = timesliderOptions(
+               position = "topright",
+               timeAttribute = "time",
+               range = TRUE)) %>%
+  setView(-72, 22, 4)
+
+```
+
+
+```{r}
+ggplot(real_estate_tidy, aes(x = SizeRank, y = price, color = population)) + 
+  geom_point(position = position_dodge(width = 0.75)) 
+
+```
+
